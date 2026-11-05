@@ -19,7 +19,7 @@ Flutter stable, Dart; Windows, Android phones/tablets, iOS/iPadOS. Windows deskt
 Identifier: `com.infinityball.seedstash` for Android and iOS, and Windows package identity if used. ASC registration **not completed**. Manual setup required: `com.infinityball.seedstash` could not be registered: `FAILED bundleId lookup rejected: FORBIDDEN_ERROR.PLA_NOT_ACCEPTED`. Account owner must accept Apple Program License Agreement before retrying.
 
 ## Status and milestones
-Documentation-only scaffold. No Flutter project, app icon, CI or build yet. See [PLAN.md](PLAN.md) and issues. `AppStore/description.txt` is draft listing copy; real `AppStore/icon.png` must be generated through spark-media OpenAI Images and wired to all three platforms; no placeholder accepted.
+Flutter 3.47.7 project skeleton and platform build CI exist. Packet inventory, app icon, and release workflow remain future milestones. Generated Flutter template launcher icons are not product artwork; real `AppStore/icon.png` must be generated through spark-media OpenAI Images and wired to all three platforms. `AppStore/description.txt` remains draft listing copy. See [PLAN.md](PLAN.md) and issues.
 
 ## Develop
 Once skeleton issue lands: use pinned Flutter stable version in `toolchain.json`; `flutter create --platforms=windows,android,ios .`, then `flutter test`, `flutter build windows --release`, `flutter build apk --debug`. Linux host builds use Docker; Windows build runs on `windows-latest`. Release workflow `.github/workflows/release.yml` on `v*` tag or manual dispatch zips Windows build into GitHub release. TestFlight and Play publish later, with secret names `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8`, `ASC_TEAM_ID` (no values in source).
