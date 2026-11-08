@@ -8,8 +8,8 @@ Shared screens with small AdaptiveScaffold/AdaptiveButton/AdaptiveDialog seam: C
 
 ## Milestones / dependencies
 1. Flutter skeleton and Windows/Android/iOS CI, pinned toolchain.
-2. Domain model, immutable adjustments and local store.
-3. Packet entry/search and count adjustments.
+2. Domain model, immutable adjustments and local store (done).
+3. Packet entry/search and count adjustments (in progress).
 4. Germination samples and measured percentage, low-stock/old filters, shopping flags.
 5. Adaptive platform UI/accessibility/golden tests.
 6. JSON/CSV backup and restore, privacy review.
