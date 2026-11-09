@@ -29,3 +29,32 @@ List<SeedPacket> searchPackets(Iterable<SeedPacket> packets, String query) {
 
 /// Fixed UI warning threshold, not an estimate of packet viability.
 bool lowStock(SeedPacket packet) => packet.remainingCount <= 10;
+
+List<SeedPacket> shoppingPackets(Iterable<SeedPacket> packets) => [
+  for (final packet in packets)
+    if (packet.shopping || packet.remainingCount == 0) packet,
+];
+
+String shoppingExport(Iterable<SeedPacket> packets, {bool csv = false}) {
+  final selected = shoppingPackets(packets);
+  if (!csv) {
+    return selected
+        .map(
+          (p) =>
+              '${p.crop} · ${p.variety} (${p.supplier}, ${p.lot ?? "lot unknown"})',
+        )
+        .join('\n');
+  }
+  String cell(String value) => '"${value.replaceAll('"', '""')}"';
+  return [
+    'Crop,Variety,Supplier,Lot,Remaining',
+    for (final p in selected)
+      [
+        p.crop,
+        p.variety,
+        p.supplier,
+        p.lot ?? '',
+        '${p.remainingCount}',
+      ].map(cell).join(','),
+  ].join('\r\n');
+}

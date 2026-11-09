@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart' as material;
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 
@@ -68,6 +69,7 @@ class _PacketLibraryState extends State<PacketLibrary> {
   String? error;
   String query = '';
   String? selectedId;
+  bool showingShopping = false;
 
   @override
   void initState() {
@@ -214,6 +216,74 @@ class _PacketLibraryState extends State<PacketLibrary> {
     );
   }
 
+  Future<void> _germinationTest(SeedPacket packet) async {
+    final testedCtrl = TextEditingController(text: '10');
+    final sproutedCtrl = TextEditingController();
+    final dateCtrl = TextEditingController(
+      text: DateTime.now().toIso8601String().substring(0, 10),
+    );
+    final result = await _formDialog(
+      context,
+      'Log germination test',
+      [testedCtrl, sproutedCtrl, dateCtrl],
+      [
+        _field('Seeds tested', testedCtrl),
+        _field('Seeds sprouted', sproutedCtrl),
+        _field('Date (YYYY-MM-DD)', dateCtrl),
+      ],
+    );
+    if (result != true || !mounted) return;
+    final testedCount = int.tryParse(testedCtrl.text.trim());
+    final sproutedCount = int.tryParse(sproutedCtrl.text.trim());
+    final day = DateTime.tryParse(dateCtrl.text.trim());
+    if (testedCount == null ||
+        testedCount <= 0 ||
+        sproutedCount == null ||
+        sproutedCount < 0 ||
+        sproutedCount > testedCount ||
+        day == null ||
+        day.toIso8601String().substring(0, 10) != dateCtrl.text.trim() ||
+        !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(dateCtrl.text.trim())) {
+      setState(
+        () => error = 'Tested seeds must be positive, sprouted seeds between 0 and tested, and date valid YYYY-MM-DD.',
+      );
+      return;
+    }
+    await _update(
+      (old) => InventorySnapshot(
+        revision: old.revision,
+        packets: [
+          for (final current in old.packets)
+            if (current.id == packet.id)
+              current.withSample(
+                GerminationSample(
+                  date: day,
+                  tested: testedCount,
+                  sprouted: sproutedCount,
+                ),
+              )
+            else
+              current,
+        ],
+      ),
+    );
+  }
+
+  Future<void> _toggleShopping(SeedPacket packet) async {
+    await _update(
+      (old) => InventorySnapshot(
+        revision: old.revision,
+        packets: [
+          for (final current in old.packets)
+            if (current.id == packet.id)
+              current.withShopping(!current.shopping)
+            else
+              current,
+        ],
+      ),
+    );
+  }
+
   Widget _field(String label, TextEditingController controller) {
     switch (defaultTargetPlatform) {
       case TargetPlatform.iOS:
@@ -351,6 +421,38 @@ class _PacketLibraryState extends State<PacketLibrary> {
     }
   }
 
+  Widget _shoppingView(bool wide) {
+    final packets = shoppingPackets(snapshot?.packets ?? []);
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        if (!wide)
+          _button(
+            'Back to packets',
+            () => setState(() => showingShopping = false),
+          ),
+        const Text('Shopping list', textScaler: TextScaler.linear(1.3)),
+        _button('Copy shopping list', () async {
+          await Clipboard.setData(
+            ClipboardData(text: shoppingExport(snapshot?.packets ?? [])),
+          );
+        }),
+        _button('Copy shopping CSV', () async {
+          await Clipboard.setData(
+            ClipboardData(
+              text: shoppingExport(snapshot?.packets ?? [], csv: true),
+            ),
+          );
+        }),
+        if (packets.isEmpty) const Text('No flagged or exhausted packets.'),
+        for (final packet in packets)
+          Text(
+            '${packet.crop} · ${packet.variety} · ${packet.supplier} · ${packet.remainingCount} remaining${packet.shopping ? " · Flagged" : " · Exhausted"}',
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final packets = searchPackets(snapshot?.packets ?? [], query);
@@ -367,6 +469,13 @@ class _PacketLibraryState extends State<PacketLibrary> {
                 _searchController,
               ),
               _button('Add packet', _add),
+              _button(
+                'Shopping list',
+                () => setState(() {
+                  selectedId = null;
+                  showingShopping = true;
+                }),
+              ),
               if (error != null)
                 Text(error!, key: const Key('inventory-error')),
             ],
@@ -398,7 +507,10 @@ class _PacketLibraryState extends State<PacketLibrary> {
                             child: _button(
                               '${packet.crop} · ${packet.variety} — ${packet.remainingCount} seeds${lowStock(packet) ? ' · Low stock' : ''}',
                               () {
-                                setState(() => selectedId = packet.id);
+                                setState(() {
+                                  selectedId = packet.id;
+                                  showingShopping = false;
+                                });
                               },
                             ),
                           ),
@@ -411,7 +523,9 @@ class _PacketLibraryState extends State<PacketLibrary> {
         ),
       ],
     );
-    final detail = current == null
+    final detail = showingShopping
+        ? _shoppingView(wide)
+        : current == null
         ? const Center(child: Text('Select a packet.'))
         : SingleChildScrollView(
             child: Padding(
@@ -435,6 +549,23 @@ class _PacketLibraryState extends State<PacketLibrary> {
                     'Remaining: ${current.remainingCount} seeds${lowStock(current) ? " · Low stock" : ""}',
                   ),
                   _button('Log sowing', () => _sow(current)),
+                  _button(
+                    'Log germination test',
+                    () => _germinationTest(current),
+                  ),
+                  _button(
+                    current.shopping
+                        ? 'Remove from shopping list'
+                        : 'Add to shopping list',
+                    () => _toggleShopping(current),
+                  ),
+                  const Text(
+                    'Germination samples · measured only; not packet viability',
+                  ),
+                  for (final sample in current.samples)
+                    Text(
+                      '${sample.date.toIso8601String().substring(0, 10)} · ${sample.sprouted}/${sample.tested} sprouted · ${sample.measuredPercent?.toStringAsFixed(1) ?? "Unknown"}%',
+                    ),
                   const Text('Count history'),
                   for (final event in current.adjustments)
                     Text(
@@ -451,7 +582,7 @@ class _PacketLibraryState extends State<PacketLibrary> {
               Expanded(flex: 2, child: detail),
             ],
           )
-        : current == null
+        : current == null && !showingShopping
         ? list
         : detail;
   }

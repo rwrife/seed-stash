@@ -110,6 +110,62 @@ void main() {
     }
   });
 
+  testWidgets('germination and shopping survive changes on Android', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    try {
+      final store = MemoryStore();
+      store.data = InventorySnapshot(
+        revision: 0,
+        packets: [
+          SeedPacket(
+            id: 'a',
+            crop: 'Pea',
+            variety: 'Sugar',
+            supplier: 'Farm',
+            location: 'Drawer',
+            initialCount: 12,
+          ),
+        ],
+      );
+      await tester.pumpWidget(SeedStashApp(store: store));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Pea · Sugar'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Log germination test'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Seeds tested'),
+        '10',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Seeds sprouted'),
+        '7',
+      );
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(store.data.packets.single.samples.single.measuredPercent, 70);
+      expect(find.textContaining('7/10 sprouted · 70.0%'), findsOneWidget);
+      await tester.tap(find.text('Add to shopping list'));
+      await tester.pumpAndSettle();
+      expect(store.data.packets.single.shopping, isTrue);
+      await tester.tap(find.text('Back to packets'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Shopping list'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Pea · Sugar · Farm'), findsOneWidget);
+      await tester.tap(find.text('Copy shopping CSV'));
+      await tester.pump();
+    } finally {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
   testWidgets('phone catalog search and dated sowing persist', (tester) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     try {

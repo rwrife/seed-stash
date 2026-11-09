@@ -48,12 +48,51 @@ void main() {
     expect(loaded.packets.single.samples.single.measuredPercent, 75);
     expect(loaded.packets.single.packedOn, DateTime.utc(2026, 2, 1));
     expect(loaded.packets.single.lot, 'A1');
+    expect(loaded.packets.single.shopping, isFalse);
     await expectLater(
       store.update((old) => old, expectedRevision: 0),
       throwsA(isA<StaleInventoryException>()),
     );
     expect((await store.read()).revision, 1);
   });
+
+  test(
+    'migrates version 2 flags and persists shopping without losing history',
+    () async {
+      await store.update(
+        (s) => InventorySnapshot(revision: s.revision, packets: [packet('a')]),
+      );
+      final file = File('${home.path}/inventory.json');
+      final old = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+      old['version'] = 2;
+      (old['packets'] as List).single.remove('shopping');
+      await file.writeAsString(jsonEncode(old));
+      final migrated = await store.read();
+      expect(migrated.revision, 1);
+      expect(migrated.packets.single.shopping, isFalse);
+      expect(migrated.packets.single.samples.single.measuredPercent, 75);
+      expect(jsonDecode(await file.readAsString())['version'], 3);
+      await store.update(
+        (s) => InventorySnapshot(
+          revision: s.revision,
+          packets: [s.packets.single.withShopping(true)],
+        ),
+        expectedRevision: 1,
+      );
+      expect(
+        (await LocalInventoryStore(
+          directory: home,
+        ).read()).packets.single.shopping,
+        isTrue,
+      );
+      final malformed =
+          jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+      (malformed['packets'] as List).single['shopping'] = 'true';
+      await file.writeAsString(jsonEncode(malformed));
+      await expectLater(store.read(), throwsFormatException);
+      expect(await file.readAsString(), jsonEncode(malformed));
+    },
+  );
 
   test('serializes concurrent writers without losing packets', () async {
     final a = LocalInventoryStore(directory: home);
@@ -122,7 +161,7 @@ void main() {
       old.remove('revision');
       await file.writeAsString(jsonEncode(old));
       expect((await store.read()).revision, 0);
-      expect(jsonDecode(await file.readAsString())['version'], 2);
+      expect(jsonDecode(await file.readAsString())['version'], 3);
       old['version'] = 99;
       await file.writeAsString(jsonEncode(old));
       await expectLater(store.read(), throwsFormatException);

@@ -10,6 +10,7 @@ class SeedPacket {
     required this.initialCount,
     this.lot,
     this.packedOn,
+    this.shopping = false,
     Iterable<CountAdjustment> adjustments = const [],
     Iterable<GerminationSample> samples = const [],
   }) : adjustments = List.unmodifiable(adjustments),
@@ -38,6 +39,7 @@ class SeedPacket {
   final int initialCount;
   final String? lot;
   final DateTime? packedOn;
+  final bool shopping;
   final List<CountAdjustment> adjustments;
   final List<GerminationSample> samples;
 
@@ -55,9 +57,12 @@ class SeedPacket {
   SeedPacket withSample(GerminationSample sample) =>
       _copy(samples: [...samples, sample]);
 
+  SeedPacket withShopping(bool value) => _copy(shopping: value);
+
   SeedPacket _copy({
     List<CountAdjustment>? adjustments,
     List<GerminationSample>? samples,
+    bool? shopping,
   }) => SeedPacket(
     id: id,
     crop: crop,
@@ -67,6 +72,7 @@ class SeedPacket {
     initialCount: initialCount,
     lot: lot,
     packedOn: packedOn,
+    shopping: shopping ?? this.shopping,
     adjustments: adjustments ?? this.adjustments,
     samples: samples ?? this.samples,
   );
