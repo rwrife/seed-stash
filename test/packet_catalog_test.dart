@@ -27,6 +27,34 @@ void main() {
     expect(lowStock(packets.first), isFalse);
   });
 
+  test('shopping includes flagged or exhausted; CSV escapes fields', () {
+    final flagged = SeedPacket(
+      id: 'flagged',
+      crop: 'Pea',
+      variety: 'Sugar, "Snap"',
+      supplier: 'Farmhouse',
+      location: 'Drawer',
+      initialCount: 20,
+      shopping: true,
+    );
+    final exhausted = packet('empty', 'Tomato', 'Roma', 0);
+    final stocked = packet('stocked', 'Carrot', 'Nantes', 4);
+    expect(shoppingPackets([flagged, exhausted, stocked]).map((p) => p.id), [
+      'flagged',
+      'empty',
+    ]);
+    expect(
+      shoppingExport([flagged, exhausted, stocked]),
+      contains('Pea · Sugar, "Snap"'),
+    );
+    expect(
+      shoppingExport([flagged, exhausted, stocked], csv: true),
+      contains('"Sugar, ""Snap"""'),
+    );
+    expect(flagged.withShopping(false).shopping, isFalse);
+    expect(shoppingPackets([flagged.withShopping(false), stocked]), isEmpty);
+  });
+
   test('sowing appends dated count event, prevents negative balance', () {
     final original = packet('a', 'Pea', 'Sugar', 10);
     final event = CountAdjustment(

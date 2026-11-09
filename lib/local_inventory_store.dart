@@ -41,7 +41,7 @@ class LocalInventoryStore {
 
   final Directory? directory;
   static const _filename = 'inventory.json';
-  static const _version = 2;
+  static const _version = 3;
   static Future<void>? _inProcessQueue;
 
   Future<Directory> _home() async =>
@@ -111,16 +111,16 @@ class LocalInventoryStore {
     // Never overwrite corrupt/unsupported data. Errors propagate to caller.
     final root = _object(jsonDecode(await file.readAsString()));
     final version = _integer(root['version']);
-    if (version != 1 && version != _version) {
+    if (version != 1 && version != 2 && version != _version) {
       throw FormatException('Unsupported inventory version: $version');
     }
     final raw = root['packets'];
     if (raw is! List) throw const FormatException('Invalid packets');
     final snapshot = InventorySnapshot(
       revision: version == 1 ? 0 : _integer(root['revision']),
-      packets: raw.map((entry) => _packet(_object(entry))),
+      packets: raw.map((entry) => _packet(_object(entry), version)),
     );
-    if (version == 1) await _save(home, snapshot);
+    if (version != _version) await _save(home, snapshot);
     return snapshot;
   }
 
@@ -167,6 +167,11 @@ int _integer(Object? value) {
   return value;
 }
 
+bool _boolean(Object? value) {
+  if (value is! bool) throw const FormatException('Invalid boolean');
+  return value;
+}
+
 String? _optionalString(Object? value) => value == null ? null : _string(value);
 
 DateTime _date(Object? value) {
@@ -178,7 +183,7 @@ DateTime _date(Object? value) {
   return date;
 }
 
-SeedPacket _packet(Map<String, Object?> data) {
+SeedPacket _packet(Map<String, Object?> data, int version) {
   final adjustments = data['adjustments'];
   final samples = data['samples'];
   if (adjustments is! List || samples is! List) {
@@ -192,6 +197,7 @@ SeedPacket _packet(Map<String, Object?> data) {
     location: _string(data['location']),
     lot: _optionalString(data['lot']),
     packedOn: data['packedOn'] == null ? null : _date(data['packedOn']),
+    shopping: version < 3 ? false : _boolean(data['shopping']),
     initialCount: _integer(data['initialCount']),
     adjustments: adjustments.map((item) {
       final entry = _object(item);
@@ -220,6 +226,7 @@ Map<String, Object?> _encodePacket(SeedPacket packet) => {
   'location': packet.location,
   'lot': packet.lot,
   'packedOn': packet.packedOn?.toIso8601String(),
+  'shopping': packet.shopping,
   'initialCount': packet.initialCount,
   'adjustments': [
     for (final item in packet.adjustments)
