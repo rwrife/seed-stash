@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:seed_stash/local_inventory_store.dart';
@@ -74,6 +77,135 @@ void main() {
             fail('unexpected platform');
         }
       } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+  }
+
+  for (final platform in [
+    TargetPlatform.iOS,
+    TargetPlatform.android,
+    TargetPlatform.windows,
+  ]) {
+    for (final width in [390.0, 900.0, 1280.0]) {
+      testWidgets('adaptive $platform at $width', (tester) async {
+        debugDefaultTargetPlatformOverride = platform;
+        tester.view.physicalSize = Size(width, 844);
+        tester.view.devicePixelRatio = 1;
+        try {
+          final store = MemoryStore();
+          store.data = InventorySnapshot(
+            revision: 0,
+            packets: [
+              SeedPacket(
+                id: 'a',
+                crop: 'Pea',
+                variety: 'Sugar',
+                supplier: 'Farm',
+                location: 'Drawer',
+                initialCount: 12,
+              ),
+            ],
+          );
+          await tester.pumpWidget(SeedStashApp(store: store));
+          await tester.pumpAndSettle();
+          expect(find.textContaining('Pea · Sugar'), findsOneWidget);
+          expect(
+            find.text('Select a packet.'),
+            width >= 720 ? findsOneWidget : findsNothing,
+          );
+          expect(tester.takeException(), isNull);
+          if (Platform.isLinux) {
+            await expectLater(
+              find.byType(SeedStashApp),
+              matchesGoldenFile(
+                'goldens/${platform.name}-${width.toInt()}.png',
+              ),
+            );
+          }
+        } finally {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+          debugDefaultTargetPlatformOverride = null;
+        }
+      });
+    }
+  }
+
+  testWidgets('Windows keyboard shortcuts and selection', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    try {
+      final store = MemoryStore();
+      store.data = InventorySnapshot(
+        revision: 0,
+        packets: [
+          SeedPacket(
+            id: 'a',
+            crop: 'Pea',
+            variety: 'Sugar',
+            supplier: 'Farm',
+            location: 'Drawer',
+            initialCount: 12,
+          ),
+        ],
+      );
+      await tester.pumpWidget(SeedStashApp(store: store));
+      await tester.pumpAndSettle();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+      expect(find.text('New packet'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Pea · Sugar'));
+      await tester.pumpAndSettle();
+      expect(find.text('Supplier: Farm'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(FocusManager.instance.primaryFocus, isNotNull);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.text('Select a packet.'), findsOneWidget);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+      expect(tester.testTextInput.isVisible, isTrue);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  for (final platform in [
+    TargetPlatform.iOS,
+    TargetPlatform.android,
+    TargetPlatform.windows,
+  ]) {
+    testWidgets('high contrast and large type on $platform', (tester) async {
+      debugDefaultTargetPlatformOverride = platform;
+      tester.view.physicalSize = const Size(1280, 844);
+      tester.view.devicePixelRatio = 1;
+      tester.view.platformDispatcher.accessibilityFeaturesTestValue =
+          const FakeAccessibilityFeatures(highContrast: true);
+      tester.view.platformDispatcher.textScaleFactorTestValue = 2;
+      final semantics = tester.ensureSemantics();
+      try {
+        await tester.pumpWidget(SeedStashApp(store: MemoryStore()));
+        await tester.pumpAndSettle();
+        expect(
+          MediaQuery.of(tester.element(find.byType(PacketLibrary)))
+              .highContrast,
+          isTrue,
+        );
+        expect(find.text('Add packet'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      } finally {
+        semantics.dispose();
+        tester.view.platformDispatcher.clearAccessibilityFeaturesTestValue();
+        tester.view.platformDispatcher.clearTextScaleFactorTestValue();
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
         debugDefaultTargetPlatformOverride = null;
       }
     });
