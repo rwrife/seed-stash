@@ -12,6 +12,18 @@ import 'seed_packet.dart';
 
 void main() => runApp(const SeedStashApp());
 
+class _AddPacketIntent extends Intent {
+  const _AddPacketIntent();
+}
+
+class _FocusSearchIntent extends Intent {
+  const _FocusSearchIntent();
+}
+
+class _ClearSelectionIntent extends Intent {
+  const _ClearSelectionIntent();
+}
+
 class SeedStashApp extends StatelessWidget {
   const SeedStashApp({super.key, this.store});
 
@@ -65,6 +77,7 @@ class PacketLibrary extends StatefulWidget {
 }
 
 class _PacketLibraryState extends State<PacketLibrary> {
+  final _searchFocus = FocusNode(debugLabel: 'Search packets');
   InventorySnapshot? snapshot;
   String? error;
   String query = '';
@@ -294,6 +307,9 @@ class _PacketLibraryState extends State<PacketLibrary> {
             label: label,
             child: CupertinoTextField(
               controller: controller,
+              focusNode: identical(controller, _searchController)
+                  ? _searchFocus
+                  : null,
               placeholder: label,
               padding: const EdgeInsets.all(12),
             ),
@@ -303,7 +319,13 @@ class _PacketLibraryState extends State<PacketLibrary> {
       case TargetPlatform.linux:
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
-          child: fluent.TextBox(controller: controller, placeholder: label),
+          child: fluent.TextBox(
+            controller: controller,
+            focusNode: identical(controller, _searchController)
+                ? _searchFocus
+                : null,
+            placeholder: label,
+          ),
         );
       case TargetPlatform.android:
       case TargetPlatform.fuchsia:
@@ -311,6 +333,9 @@ class _PacketLibraryState extends State<PacketLibrary> {
           padding: const EdgeInsets.only(bottom: 12),
           child: material.TextField(
             controller: controller,
+            focusNode: identical(controller, _searchController)
+                ? _searchFocus
+                : null,
             decoration: material.InputDecoration(labelText: label),
           ),
         );
@@ -431,7 +456,7 @@ class _PacketLibraryState extends State<PacketLibrary> {
             'Back to packets',
             () => setState(() => showingShopping = false),
           ),
-        const Text('Shopping list', textScaler: TextScaler.linear(1.3)),
+        const Text('Shopping list'),
         _button('Copy shopping list', () async {
           await Clipboard.setData(
             ClipboardData(text: shoppingExport(snapshot?.packets ?? [])),
@@ -448,6 +473,8 @@ class _PacketLibraryState extends State<PacketLibrary> {
         for (final packet in packets)
           Text(
             '${packet.crop} · ${packet.variety} · ${packet.supplier} · ${packet.remainingCount} remaining${packet.shopping ? " · Flagged" : " · Exhausted"}',
+            semanticsLabel:
+                '${packet.crop}, ${packet.variety}, supplier ${packet.supplier}, ${packet.remainingCount} seeds remaining, status: ${packet.shopping ? "Flagged" : "Exhausted"}',
           ),
       ],
     );
@@ -458,6 +485,36 @@ class _PacketLibraryState extends State<PacketLibrary> {
     final packets = searchPackets(snapshot?.packets ?? [], query);
     final wide = MediaQuery.sizeOf(context).width >= 720;
     final current = selected;
+    final shortcuts = <ShortcutActivator, Intent>{
+      // ponytail: Leave unmodified arrow keys to platform text editing; add
+      // list-only arrow traversal when list rows own their focus nodes.
+      const SingleActivator(LogicalKeyboardKey.keyN, control: true):
+          const _AddPacketIntent(),
+      const SingleActivator(LogicalKeyboardKey.keyF, control: true):
+          const _FocusSearchIntent(),
+      const SingleActivator(LogicalKeyboardKey.escape):
+          const _ClearSelectionIntent(),
+    };
+    final actions = <Type, Action<Intent>>{
+      _AddPacketIntent: CallbackAction<_AddPacketIntent>(
+        onInvoke: (_) => _add(),
+      ),
+      _FocusSearchIntent: CallbackAction<_FocusSearchIntent>(
+        onInvoke: (_) {
+          _searchFocus.requestFocus();
+          return null;
+        },
+      ),
+      _ClearSelectionIntent: CallbackAction<_ClearSelectionIntent>(
+        onInvoke: (_) {
+          setState(() {
+            selectedId = null;
+            showingShopping = false;
+          });
+          return null;
+        },
+      ),
+    };
     final list = Column(
       children: [
         Padding(
@@ -538,10 +595,7 @@ class _PacketLibraryState extends State<PacketLibrary> {
                       'Back to packets',
                       () => setState(() => selectedId = null),
                     ),
-                  Text(
-                    '${current.crop} · ${current.variety}',
-                    textScaler: const TextScaler.linear(1.3),
-                  ),
+                  Text('${current.crop} · ${current.variety}'),
                   Text('Supplier: ${current.supplier}'),
                   Text('Lot: ${current.lot ?? "Unknown"}'),
                   Text('Location: ${current.location}'),
@@ -575,7 +629,7 @@ class _PacketLibraryState extends State<PacketLibrary> {
               ),
             ),
           );
-    return wide
+    final content = wide
         ? Row(
             children: [
               Expanded(flex: 3, child: list),
@@ -585,6 +639,15 @@ class _PacketLibraryState extends State<PacketLibrary> {
         : current == null && !showingShopping
         ? list
         : detail;
+    return Shortcuts(
+      shortcuts: shortcuts,
+      child: Actions(
+        actions: actions,
+        child: FocusTraversalGroup(
+          child: Focus(autofocus: true, child: content),
+        ),
+      ),
+    );
   }
 
   final _searchController = TextEditingController();
@@ -601,6 +664,7 @@ class _PacketLibraryState extends State<PacketLibrary> {
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 }
