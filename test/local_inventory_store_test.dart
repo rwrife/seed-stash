@@ -94,6 +94,61 @@ void main() {
     },
   );
 
+  test('backup preview validates before overwrite; stale restore preserves current data', () async {
+    await store.update(
+      (s) => InventorySnapshot(revision: s.revision, packets: [packet('a')]),
+    );
+    final backup = await store.exportBackup();
+    final preview = store.previewBackup(backup);
+    expect(preview.packets.single.samples.single.measuredPercent, 75);
+    expect(preview.packets.single.adjustments.single.delta, -5);
+    final corrupt = jsonDecode(backup) as Map<String, dynamic>;
+    (corrupt['packets'] as List).add((corrupt['packets'] as List).single);
+    expect(
+      () => store.previewBackup(jsonEncode(corrupt)),
+      throwsFormatException,
+    );
+    corrupt['version'] = 99;
+    expect(
+      () => store.previewBackup(jsonEncode(corrupt)),
+      throwsFormatException,
+    );
+    expect((await store.read()).packets.length, 1);
+    await store.update(
+      (s) => InventorySnapshot(revision: s.revision, packets: [packet('b')]),
+    );
+    await expectLater(
+      store.restoreBackup(preview, expectedRevision: 1),
+      throwsA(isA<StaleInventoryException>()),
+    );
+    expect((await store.read()).packets.map((p) => p.id), ['b']);
+    await store.restoreBackup(preview, expectedRevision: 2);
+    expect((await store.read()).packets.map((p) => p.id), ['a']);
+    expect((await store.read()).revision, 3);
+  });
+
+  test('CSV quotes user fields and exports current count', () async {
+    await store.update(
+      (s) => InventorySnapshot(
+        revision: s.revision,
+        packets: [
+          SeedPacket(
+            id: 'c',
+            crop: 'Pea, "snow"\nline',
+            variety: 'Sweet',
+            supplier: 'Farm',
+            location: 'Drawer',
+            initialCount: 8,
+          ),
+        ],
+      ),
+    );
+    final csv = await store.exportCsv();
+    expect(csv, contains('"Pea, ""snow""\nline"'));
+    expect(csv, contains('"8"'));
+    expect(csv, endsWith('\r\n'));
+  });
+
   test('serializes concurrent writers without losing packets', () async {
     final a = LocalInventoryStore(directory: home);
     final b = LocalInventoryStore(directory: home);

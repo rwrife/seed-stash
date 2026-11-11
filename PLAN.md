@@ -9,11 +9,11 @@ Shared screens with small AdaptiveScaffold/AdaptiveButton/AdaptiveDialog seam: C
 ## Milestones / dependencies
 1. Flutter skeleton and Windows/Android/iOS CI, pinned toolchain.
 2. Domain model, immutable adjustments and local store (done).
-3. Packet entry/search and count adjustments (in progress).
-4. Germination samples and measured percentage, low-stock/old filters, shopping flags.
-5. Adaptive platform UI/accessibility/golden tests.
-6. JSON/CSV backup and restore, privacy review.
-7. Icon and Windows release workflow; real Windows artifact on `v*` tag.
+3. Packet entry/search and count adjustments (done).
+4. Germination samples and measured percentage, low-stock/old filters, shopping flags (done).
+5. Adaptive platform UI/accessibility/golden tests (done).
+6. JSON/CSV backup and restore, privacy review (done).
+7. Icon and Windows release workflow; real Windows artifact on `v*` tag (done).
 
 ## Packaging
 `com.infinityball.seedstash` for Android applicationId, iOS bundle ID and Windows/MSIX identity when used. App Store Connect registration blocked by `FORBIDDEN_ERROR.PLA_NOT_ACCEPTED`; owner accepts agreement before mobile signing. GitHub secrets are `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8`, `ASC_TEAM_ID`. `AppStore/description.txt` reviewed against implemented behavior; generate real `AppStore/icon.png` with spark-media OpenAI Images, wire Windows ico and Android/iOS launcher assets. `.github/workflows/release.yml`: `v*` or manual dispatch builds on `windows-latest` and attaches zipped portable build to GitHub release. Android debug build in Linux/Docker CI; iOS build on macOS runner as later milestone. TestFlight/Play submission later, not MVP. No fabricated build/CI claim.
