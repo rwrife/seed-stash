@@ -1,9 +1,12 @@
 import 'dart:math';
+import 'dart:convert';
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart' as material;
+import 'package:share_plus/share_plus.dart';
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 
 import 'local_inventory_store.dart';
@@ -122,6 +125,89 @@ class _PacketLibraryState extends State<PacketLibrary> {
       if (mounted) setState(() => error = 'Save failed: $e');
       await _reload();
       if (mounted) setState(() => error = 'Save failed: $e');
+    }
+  }
+
+  Future<void> _export({required bool csv}) async {
+    try {
+      final content = csv
+          ? await widget.store.exportCsv()
+          : await widget.store.exportBackup();
+      final filename = csv ? 'seed-stash.csv' : 'seed-stash.json';
+      final mime = csv ? 'text/csv' : 'application/json';
+      if (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS) {
+        if (!mounted) return;
+        final box = context.findRenderObject() as RenderBox?;
+        await SharePlus.instance.share(
+          ShareParams(
+            files: [
+              XFile.fromData(
+                utf8.encode(content),
+                mimeType: mime,
+                name: filename,
+              ),
+            ],
+            sharePositionOrigin: box == null
+                ? null
+                : box.localToGlobal(Offset.zero) & box.size,
+          ),
+        );
+      } else {
+        final location = await getSaveLocation(
+          suggestedName: filename,
+          acceptedTypeGroups: [
+            XTypeGroup(
+              label: csv ? 'CSV' : 'JSON',
+              extensions: [csv ? 'csv' : 'json'],
+            ),
+          ],
+        );
+        if (location == null) return;
+        await XFile.fromData(
+          utf8.encode(content),
+          mimeType: mime,
+          name: filename,
+        ).saveTo(location.path);
+      }
+    } catch (e) {
+      if (mounted) setState(() => error = 'Export failed: $e');
+    }
+  }
+
+  Future<void> _restore() async {
+    try {
+      final file = await openFile(
+        acceptedTypeGroups: [
+          const XTypeGroup(
+            label: 'JSON',
+            extensions: ['json'],
+            uniformTypeIdentifiers: ['public.json'],
+          ),
+        ],
+      );
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
+      if (bytes.length > 20 * 1024 * 1024) {
+        throw const FormatException('Backup exceeds 20 MB');
+      }
+      final preview = widget.store.previewBackup(utf8.decode(bytes));
+      final current = await widget.store.read();
+      if (!mounted) return;
+      final confirmed = await _dialog(
+        'Replace inventory?',
+        Text(
+          'Restore ${preview.packets.length} packets over ${current.packets.length} current packets? Existing records will be replaced. Export a backup first if needed.',
+        ),
+      );
+      if (!confirmed) return;
+      await widget.store.restoreBackup(
+        preview,
+        expectedRevision: current.revision,
+      );
+      await _reload();
+    } catch (e) {
+      if (mounted) setState(() => error = 'Restore failed: $e');
     }
   }
 
@@ -360,6 +446,65 @@ class _PacketLibraryState extends State<PacketLibrary> {
     return result;
   }
 
+  Future<bool> _dialog(String title, Widget body) async {
+    final result = await switch (defaultTargetPlatform) {
+      TargetPlatform.iOS || TargetPlatform.macOS => showCupertinoDialog<bool>(
+        context: context,
+        builder: (context) => CupertinoAlertDialog(
+          title: Text(title),
+          content: body,
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            CupertinoDialogAction(
+              isDestructiveAction: true,
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Confirm'),
+            ),
+          ],
+        ),
+      ),
+      TargetPlatform.windows || TargetPlatform.linux => fluent.showDialog<bool>(
+        context: context,
+        builder: (context) => fluent.ContentDialog(
+          title: Text(title),
+          content: body,
+          actions: [
+            fluent.Button(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            fluent.FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Confirm'),
+            ),
+          ],
+        ),
+      ),
+      TargetPlatform.android ||
+      TargetPlatform.fuchsia => material.showDialog<bool>(
+        context: context,
+        builder: (context) => material.AlertDialog(
+          title: Text(title),
+          content: body,
+          actions: [
+            material.TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            material.FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Confirm'),
+            ),
+          ],
+        ),
+      ),
+    };
+    return result ?? false;
+  }
+
   Future<bool?> _showFormDialog(
     BuildContext context,
     String title,
@@ -526,6 +671,14 @@ class _PacketLibraryState extends State<PacketLibrary> {
                 _searchController,
               ),
               _button('Add packet', _add),
+              Wrap(
+                spacing: 8,
+                children: [
+                  _button('Export backup', () => _export(csv: false)),
+                  _button('Export CSV', () => _export(csv: true)),
+                  _button('Restore backup', _restore),
+                ],
+              ),
               _button(
                 'Shopping list',
                 () => setState(() {

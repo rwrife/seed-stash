@@ -1,3 +1,3 @@
-Seed Stash is an offline seed-packet library for gardeners and growers. Track crop varieties, seed suppliers, purchase/pack dates, storage locations, and approximate seed counts. Log dated packet count adjustments when sowing, record small-batch germination test samples (seeds tested vs sprouted), and flag low or old packets for next-season shopping.
+Seed Stash keeps your seed-packet inventory on your device. Record crop, variety, supplier, lot, packed date, storage location, and estimated seed count. Log dated sowing adjustments and measured germination samples; sample results do not predict packet viability. Flag packets for shopping and find low-stock packets.
 
-Everything stays on your device: no account, no cloud sync, and no internet required for inventory tracking. Export your catalog to CSV or make versioned JSON backups whenever you choose.
+Export your packet inventory as CSV or save a versioned JSON backup. Preview packet counts before confirming a restore that replaces the local inventory. No account, cloud sync, or internet connection is needed for inventory tracking.

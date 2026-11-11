@@ -53,6 +53,72 @@ class LocalInventoryStore {
     return snapshot;
   });
 
+  /// Export complete inventory without exposing app-private file paths.
+  Future<String> exportBackup() => _locked((home) async {
+    final snapshot = await _read(home);
+    return jsonEncode({
+      'version': _version,
+      'revision': snapshot.revision,
+      'packets': snapshot.packets.map(_encodePacket).toList(),
+    });
+  });
+
+  /// Validate entire backup before returning preview. No disk writes.
+  InventorySnapshot previewBackup(String backup) {
+    final root = _object(jsonDecode(backup));
+    if (_integer(root['version']) != _version) {
+      throw const FormatException('Unsupported backup version');
+    }
+    final raw = root['packets'];
+    if (raw is! List) throw const FormatException('Invalid packets');
+    return InventorySnapshot(
+      revision: _integer(root['revision']),
+      packets: raw.map((entry) => _packet(_object(entry), _version)),
+    );
+  }
+
+  /// Reject stale preview if inventory changed while confirmation was open.
+  Future<InventorySnapshot> restoreBackup(
+    InventorySnapshot preview, {
+    required int expectedRevision,
+  }) => update(
+    (current) =>
+        InventorySnapshot(revision: current.revision, packets: preview.packets),
+    expectedRevision: expectedRevision,
+  );
+
+  Future<String> exportCsv() async {
+    final snapshot = await read();
+    String cell(Object? value) =>
+        '"${(value ?? '').toString().replaceAll('"', '""')}"';
+    final rows = <List<Object?>>[
+      [
+        'id',
+        'crop',
+        'variety',
+        'supplier',
+        'lot',
+        'packedOn',
+        'location',
+        'remainingCount',
+        'shopping',
+      ],
+      for (final p in snapshot.packets)
+        [
+          p.id,
+          p.crop,
+          p.variety,
+          p.supplier,
+          p.lot,
+          p.packedOn?.toIso8601String(),
+          p.location,
+          p.remainingCount,
+          p.shopping,
+        ],
+    ];
+    return '${rows.map((row) => row.map(cell).join(',')).join('\r\n')}\r\n';
+  }
+
   /// Synchronous mutation runs under cross-process lock; never await in [change].
   /// Pass expectedRevision for user edits to reject stale forms rather than
   /// silently applying them to an inventory updated elsewhere.
